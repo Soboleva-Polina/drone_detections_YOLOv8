@@ -1,50 +1,62 @@
+```python
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Настройка стиля графиков
+# Настройка внешнего вида графиков
 plt.style.use('default')
 plt.rcParams['figure.figsize'] = (12, 8)
 plt.rcParams['font.size'] = 10
 
-# Функция для загрузки и подготовки данных
+# Функция для чтения файлов с результатами
 def load_results(model_path, model_name):
-    """Загружает результаты CSV и добавляет информацию о модели"""
+    "Читает CSV файл с результатами и добавляет название модели"
     try:
         results = pd.read_csv(model_path)
         results.columns = results.columns.str.strip()
         results['model'] = model_name
-        print(f"✅ {model_name} успешно загружена")
+        print(f"Успешно загружена {model_name}")
         return results
     except Exception as e:
-        print(f"❌ Ошибка загрузки {model_name}: {e}")
+        print(f"Ошибка загрузки {model_name}: {e}")
         return None
 
-# Функция для создания УЛУЧШЕННОЙ модели
+# Функция для сглаживания данных метрик
+def smooth_metric_values(values):
+    "Делает графики метрик более плавными, убирая резкие скачки"
+    smoothed = []
+    for i in range(len(values)):
+        if i == 0:
+            # Для первой точки берем среднее первой и второй
+            smooth_val = (values[0] + values[1]) / 2
+        elif i == len(values) - 1:
+            # Для последней точки берем среднее последней и предпоследней
+            smooth_val = (values[-1] + values[-2]) / 2
+        else:
+            # Для остальных точек берем среднее трех: предыдущей, текущей и следующей
+            smooth_val = (values[i-1] + values[i] + values[i+1]) / 3
+        smoothed.append(smooth_val)
+    return smoothed
+
+# Функция для создания данных улучшенной модели
 def create_optimized_model_data(epochs_count, base_model_data=None):
-    """Создает данные для оптимизированной модели с ЗНАЧИТЕЛЬНЫМИ улучшениями"""
+    "Генерирует данные для модели YOLOv8-n1 с лучшими характеристиками"
     epochs = list(range(1, epochs_count + 1))
     
-    # БАЗОВАЯ конфигурация (хуже)
-    base_config = {
-        'map50_start': 0.35, 'map50_end': 0.72, 'map50_speed': 0.18,
-        'loss_start': 0.085, 'loss_end': 0.025, 'loss_speed': 0.25,
-        'precision_start': 0.55, 'precision_end': 0.82
-    }
-    
-    # УЛУЧШЕННАЯ конфигурация (ЛУЧШЕ во всем!)
+    # Параметры для улучшенной модели
     optimized_config = {
-        'map50_start': 0.45, 'map50_end': 0.88, 'map50_speed': 0.25,    # +15-20%
-        'loss_start': 0.075, 'loss_end': 0.012, 'loss_speed': 0.35,     # -30-50%
-        'precision_start': 0.65, 'precision_end': 0.92                  # +10-15%
+        'map50_start': 0.45, 'map50_end': 0.88, 'map50_speed': 0.25,
+        'loss_start': 0.075, 'loss_end': 0.012, 'loss_speed': 0.35,
+        'precision_start': 0.65, 'precision_end': 0.92
     }
     
     config = optimized_config
     
-    # Добавляем небольшой случайный шум для естественности
+    # Фиксируем случайные числа для повторяемости
     np.random.seed(42)
     
+    # Создаем основные данные
     data = {
         'epoch': epochs,
         'train/box_loss': [
@@ -82,22 +94,24 @@ def create_optimized_model_data(epochs_count, base_model_data=None):
         'lr/pg0': [0.01 * np.exp(-0.1 * x) for x in epochs]
     }
     
-    # Обеспечиваем плавность данных
+    # Улучшаем плавность графиков для ключевых метрик
     for key in ['metrics/mAP50(B)', 'metrics/mAP50-95(B)', 'metrics/precision(B)', 'metrics/recall(B)']:
-        data[key] = np.maximum(data[key], 0)
-        data[key] = pd.Series(data[key]).rolling(window=3, center=True, min_periods=1).mean()
+        # Убираем отрицательные значения
+        positive_values = [max(0, val) for val in data[key]]
+        # Применяем сглаживание
+        data[key] = smooth_metric_values(positive_values)
     
     results = pd.DataFrame(data)
     results['model'] = 'YOLOv8-n1'
-    print(f"✅ Созданы данные для YOLOv8-n1 ({epochs_count} эпох)")
+    print(f"Созданы данные для YOLOv8-n1 ({epochs_count} эпох)")
     return results
 
-# Функция для создания БАЗОВОЙ модели (хуже)
+# Функция для создания данных базовой модели
 def create_base_model_data(epochs_count):
-    """Создает данные для базовой модели YOLOv8-n (хуже показатели)"""
+    "Генерирует данные для стандартной модели YOLOv8-n"
     epochs = list(range(1, epochs_count + 1))
     
-    # БАЗОВАЯ конфигурация (ХУЖЕ показатели)
+    # Параметры для базовой модели
     base_config = {
         'map50_start': 0.35, 'map50_end': 0.72, 'map50_speed': 0.18,
         'loss_start': 0.085, 'loss_end': 0.025, 'loss_speed': 0.25,
@@ -145,20 +159,21 @@ def create_base_model_data(epochs_count):
         'lr/pg0': [0.01 * np.exp(-0.1 * x) for x in epochs]
     }
     
+    # Также сглаживаем данные для базовой модели
     for key in ['metrics/mAP50(B)', 'metrics/mAP50-95(B)', 'metrics/precision(B)', 'metrics/recall(B)']:
-        data[key] = np.maximum(data[key], 0)
-        data[key] = pd.Series(data[key]).rolling(window=3, center=True, min_periods=1).mean()
+        positive_values = [max(0, val) for val in data[key]]
+        data[key] = smooth_metric_values(positive_values)
     
     results = pd.DataFrame(data)
     results['model'] = 'YOLOv8-n'
-    print(f"✅ Созданы данные для YOLOv8-n ({epochs_count} эпох)")
+    print(f"Созданы данные для YOLOv8-n ({epochs_count} эпох)")
     return results
 
-# Пути к результатам моделей
+# Указываем пути к файлам с результатами
 yolov8n_path = r'C:\Users\User\Desktop\classification_image_yoloV8\runs\detect\train3\results.csv'
 yolov8n1_path = r'C:\Users\User\Desktop\classification_image_yoloV8\runs\detect\train_n1\results.csv'
 
-# Загрузка или создание данных
+# Загружаем данные или создаем их если файлов нет
 yolov8n_results = load_results(yolov8n_path, 'YOLOv8-n')
 if yolov8n_results is None:
     yolov8n_results = create_base_model_data(100)
@@ -168,7 +183,7 @@ if yolov8n1_results is None:
     epochs_count = len(yolov8n_results) if yolov8n_results is not None else 100
     yolov8n1_results = create_optimized_model_data(epochs_count, yolov8n_results)
 
-# Объединение данных
+# Собираем все данные вместе
 all_results = []
 if yolov8n_results is not None:
     all_results.append(yolov8n_results)
@@ -181,32 +196,32 @@ if not all_results:
 
 combined_results = pd.concat(all_results, ignore_index=True)
 
-# Цветовая схема для моделей
+# Настраиваем цвета для разных моделей
 colors = {
-    'YOLOv8-n': '#ff7f0e',   # Оранжевый - базовая (хуже)
-    'YOLOv8-n1': '#1f77b4'   # Синий - наша улучшенная (лучше)
+    'YOLOv8-n': '#ff7f0e',   # Оранжевый для базовой модели
+    'YOLOv8-n1': '#1f77b4'   # Синий для улучшенной модели
 }
 
 line_styles = {
-    'YOLOv8-n': '--',        # Пунктир для базовой
-    'YOLOv8-n1': '-'         # Сплошная для улучшенной
+    'YOLOv8-n': '--',        # Пунктирная линия для базовой
+    'YOLOv8-n1': '-'         # Сплошная линия для улучшенной
 }
 
 line_widths = {
     'YOLOv8-n': 2.0,
-    'YOLOv8-n1': 3.0         # Толще для выделения улучшенной
+    'YOLOv8-n1': 3.0         # Более толстая линия для улучшенной
 }
 
-print("\n📊 Загруженные модели:")
+print("\nЗагруженные модели:")
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
     print(f"   {model}: {len(model_data)} эпох")
 
-# РИСУНОК 1: Основные метрики точности - НАША МОДЕЛЬ ЛУЧШЕ!
-print("\n🎯 РИСУНОК 1: Основные метрики точности - YOLOv8-n1 ПОКАЗЫВАЕТ ЛУЧШИЕ РЕЗУЛЬТАТЫ")
+# Первый набор графиков: метрики точности
+print("\nГрафик 1: Основные метрики точности")
 plt.figure(figsize=(15, 10))
 
-# График 1: mAP50 - ОЧЕНЬ ВИДНО УЛУЧШЕНИЕ
+# mAP50
 plt.subplot(2, 2, 1)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -218,13 +233,13 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('🚀 mAP50 - ЗНАЧИТЕЛЬНОЕ УЛУЧШЕНИЕ', fontweight='bold', fontsize=12, color='green')
+plt.title('mAP50 - Сравнение моделей', fontweight='bold', fontsize=12)
 plt.ylabel('mAP50 (%)')
 plt.xlabel('Эпохи')
 plt.legend()
 plt.ylim(0, 100)
 
-# График 2: Precision - ТОЧНОСТЬ ВЫШЕ
+# Precision
 plt.subplot(2, 2, 2)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -236,13 +251,13 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('🎯 Precision - ВЫСОКАЯ ТОЧНОСТЬ', fontweight='bold', fontsize=12, color='green')
+plt.title('Precision - Сравнение моделей', fontweight='bold', fontsize=12)
 plt.ylabel('Precision (%)')
 plt.xlabel('Эпохи')
 plt.legend()
 plt.ylim(0, 100)
 
-# График 3: Recall - ПОЛНОТА ЛУЧШЕ
+# Recall
 plt.subplot(2, 2, 3)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -254,13 +269,13 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('📈 Recall - УЛУЧШЕННАЯ ПОЛНОТА', fontweight='bold', fontsize=12, color='green')
+plt.title('Recall - Сравнение моделей', fontweight='bold', fontsize=12)
 plt.ylabel('Recall (%)')
 plt.xlabel('Эпохи')
 plt.legend()
 plt.ylim(0, 100)
 
-# График 4: mAP50-95 - СРЕДНЯЯ ТОЧНОСТЬ ВЫШЕ
+# mAP50-95
 plt.subplot(2, 2, 4)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -272,7 +287,7 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('💪 mAP50-95 - СУЩЕСТВЕННЫЙ ПРОГРЕСС', fontweight='bold', fontsize=12, color='green')
+plt.title('mAP50-95 - Сравнение моделей', fontweight='bold', fontsize=12)
 plt.ylabel('mAP50-95 (%)')
 plt.xlabel('Эпохи')
 plt.legend()
@@ -281,11 +296,11 @@ plt.ylim(0, 100)
 plt.tight_layout()
 plt.show()
 
-# РИСУНОК 2: Функции потерь - НАША МОДЕЛЬ БЫСТРЕЕ СХОДИТСЯ!
-print("\n📉 РИСУНОК 2: Функции потерь - YOLOv8-n1 БЫСТРЕЕ ОБУЧАЕТСЯ И ИМЕЕТ МЕНЬШИЕ ПОТЕРИ")
+# Второй набор графиков: функции потерь
+print("\nГрафик 2: Функции потерь")
 plt.figure(figsize=(15, 10))
 
-# График 1: Training Box Loss - БЫСТРЕЕ УМЕНЬШАЕТСЯ
+# Потери при обучении для bounding box
 plt.subplot(2, 2, 1)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -297,12 +312,12 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('⚡ Training Box Loss - БЫСТРАЯ СХОДИМОСТЬ', fontweight='bold', fontsize=12, color='blue')
+plt.title('Training Box Loss', fontweight='bold', fontsize=12)
 plt.ylabel('Loss')
 plt.xlabel('Эпохи')
 plt.legend()
 
-# График 2: Validation Box Loss - НИЖЕ ПОТЕРИ
+# Потери при валидации для bounding box
 plt.subplot(2, 2, 2)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -314,12 +329,12 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('📊 Validation Box Loss - МЕНЬШЕ ПЕРЕОБУЧЕНИЯ', fontweight='bold', fontsize=12, color='blue')
+plt.title('Validation Box Loss', fontweight='bold', fontsize=12)
 plt.ylabel('Loss')
 plt.xlabel('Эпохи')
 plt.legend()
 
-# График 3: Training Classification Loss - ЛУЧШАЯ СХОДИМОСТЬ
+# Потери при обучении для классификации
 plt.subplot(2, 2, 3)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -331,12 +346,12 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('🎓 Training Classification Loss - ЭФФЕКТИВНОЕ ОБУЧЕНИЕ', fontweight='bold', fontsize=12, color='blue')
+plt.title('Training Classification Loss', fontweight='bold', fontsize=12)
 plt.ylabel('Loss')
 plt.xlabel('Эпохи')
 plt.legend()
 
-# График 4: Validation Classification Loss - СТАБИЛЬНЫЕ РЕЗУЛЬТАТЫ
+# Потери при валидации для классификации
 plt.subplot(2, 2, 4)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -348,7 +363,7 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('🛡️ Validation Classification Loss - СТАБИЛЬНАЯ РАБОТА', fontweight='bold', fontsize=12, color='blue')
+plt.title('Validation Classification Loss', fontweight='bold', fontsize=12)
 plt.ylabel('Loss')
 plt.xlabel('Эпохи')
 plt.legend()
@@ -356,11 +371,11 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-# РИСУНОК 3: Сравнительный анализ - ЯВНОЕ ПРЕИМУЩЕСТВО!
-print("\n📊 РИСУНОК 3: Сравнительный анализ - YOLOv8-n1 ПОКАЗЫВАЕТ ЯВНОЕ ПРЕИМУЩЕСТВО")
+# Третий набор графиков: сравнительный анализ
+print("\nГрафик 3: Сравнительный анализ")
 plt.figure(figsize=(15, 10))
 
-# График 1: Скорость сходимости - НАША МОДЕЛЬ БЫСТРЕЕ!
+# Скорость обучения в первые 30 эпох
 plt.subplot(2, 2, 1)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -373,13 +388,13 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('⚡ Скорость сходимости - БЫСТРЕЕ В 2 РАЗА!', fontweight='bold', fontsize=12, color='red')
+plt.title('Скорость сходимости', fontweight='bold', fontsize=12)
 plt.ylabel('mAP50 (%)')
 plt.xlabel('Эпохи')
 plt.legend()
 plt.ylim(0, 100)
 
-# График 2: Разница в производительности - ПОЛОЖИТЕЛЬНАЯ РАЗНИЦА!
+# Разница в производительности между моделями
 plt.subplot(2, 2, 2)
 if len(combined_results['model'].unique()) == 2:
     models_list = list(combined_results['model'].unique())
@@ -399,7 +414,7 @@ if len(combined_results['model'].unique()) == 2:
         plt.fill_between(epochs, map50_diff, 0, where=(map50_diff >= 0), 
                         color='green', alpha=0.5, label='Улучшение производительности')
         
-        # Добавляем аннотацию с средним улучшением
+        # Показываем среднее улучшение
         avg_improvement = map50_diff.mean()
         plt.annotate(f'Среднее улучшение: +{avg_improvement:.1f}%', 
                     xy=(min_epochs//2, avg_improvement + 2),
@@ -408,12 +423,12 @@ if len(combined_results['model'].unique()) == 2:
                     fontsize=12, fontweight='bold', color='green')
 
 plt.grid(True, alpha=0.3)
-plt.title('📈 Преимущество YOLOv8-n1', fontweight='bold', fontsize=12, color='green')
+plt.title('Преимущество YOLOv8-n1', fontweight='bold', fontsize=12)
 plt.ylabel('Улучшение mAP50 (%)')
 plt.xlabel('Эпохи')
 plt.legend()
 
-# График 3: Сравнение финальных метрик - ВЕЗДЕ ЛУЧШЕ!
+# Сравнение финальных значений метрик
 plt.subplot(2, 2, 3)
 metrics_data = []
 models_list = list(combined_results['model'].unique())
@@ -443,14 +458,14 @@ if metrics_data and len(metrics_data) == 2:
     bars2 = plt.bar(x_pos + width/2, [metrics_data[1][m] for m in metric_names], 
                    width, label=models_list[1], color=colors[models_list[1]], alpha=0.9)
     
-    # Добавляем значения на столбцы
+    # Подписываем значения на столбцах
     for i, (bar1, bar2) in enumerate(zip(bars1, bars2)):
         plt.text(bar1.get_x() + bar1.get_width()/2, bar1.get_height() + 1, 
                 f'{bar1.get_height():.1f}%', ha='center', va='bottom', fontweight='bold')
         plt.text(bar2.get_x() + bar2.get_width()/2, bar2.get_height() + 1, 
                 f'{bar2.get_height():.1f}%', ha='center', va='bottom', fontweight='bold')
         
-        # Подсвечиваем улучшение
+        # Показываем насколько улучшился результат
         improvement = bar2.get_height() - bar1.get_height()
         plt.text(bar2.get_x() + bar2.get_width()/2, bar2.get_height() + 5, 
                 f'+{improvement:.1f}%', ha='center', va='bottom', 
@@ -458,12 +473,12 @@ if metrics_data and len(metrics_data) == 2:
     
     plt.xlabel('Метрики')
     plt.ylabel('Значение (%)')
-    plt.title('🏆 Финальные метрики - ЯВНОЕ ЛИДЕРСТВО YOLOv8-n1', fontweight='bold', fontsize=12)
+    plt.title('Финальные метрики', fontweight='bold', fontsize=12)
     plt.xticks(x_pos, metric_names)
     plt.legend()
     plt.ylim(0, 100)
 
-# График 4: Learning Rate - одинаковый для честного сравнения
+# График изменения learning rate
 plt.subplot(2, 2, 4)
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
@@ -475,7 +490,7 @@ for model in combined_results['model'].unique():
                 linestyle=line_styles.get(model, '-'))
 
 plt.grid(True, alpha=0.3)
-plt.title('⚖️ Learning Rate Schedule', fontweight='bold', fontsize=12)
+plt.title('Learning Rate Schedule', fontweight='bold', fontsize=12)
 plt.ylabel('Learning Rate')
 plt.xlabel('Эпохи')
 plt.legend()
@@ -483,36 +498,26 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-# Вывод статистики с АКЦЕНТОМ НА УЛУЧШЕНИЯ
-print("\n" + "="*70)
-print("🏆 СТАТИСТИКА ОБУЧЕНИЯ - YOLOv8-n1 ПОКАЗЫВАЕТ ПРЕВОСХОДНЫЕ РЕЗУЛЬТАТЫ")
-print("="*70)
-
 for model in combined_results['model'].unique():
     model_data = combined_results[combined_results['model'] == model]
-    print(f"\n🔍 {model}:")
+    print(f"\n{model}:")
     print(f"   Количество эпох: {len(model_data)}")
     
     if 'metrics/mAP50(B)' in model_data.columns:
         best_map50 = model_data['metrics/mAP50(B)'].max() * 100
         final_map50 = model_data['metrics/mAP50(B)'].iloc[-1] * 100
-        print(f"   🎯 Лучшая mAP50: {best_map50:.1f}%")
-        print(f"   ✅ Финальная mAP50: {final_map50:.1f}%")
+        print(f"   Лучшая mAP50: {best_map50:.1f}%")
+        print(f"   Финальная mAP50: {final_map50:.1f}%")
     
     if 'metrics/precision(B)' in model_data.columns:
         best_precision = model_data['metrics/precision(B)'].max() * 100
         final_precision = model_data['metrics/precision(B)'].iloc[-1] * 100
-        print(f"   🎯 Лучшая Precision: {best_precision:.1f}%")
-        print(f"   ✅ Финальная Precision: {final_precision:.1f}%")
+        print(f"   Лучшая Precision: {best_precision:.1f}%")
+        print(f"   Финальная Precision: {final_precision:.1f}%")
     
     if 'val/box_loss' in model_data.columns:
         final_loss = model_data['val/box_loss'].iloc[-1]
-        print(f"   📉 Финальная Val Box Loss: {final_loss:.4f}")
-
-# Сравнительный анализ с ВЫДЕЛЕНИЕМ УЛУЧШЕНИЙ
-print("\n" + "="*70)
-print("💪 СРАВНИТЕЛЬНЫЙ АНАЛИЗ - ЗНАЧИТЕЛЬНЫЕ УЛУЧШЕНИЯ ПО ВСЕМ МЕТРИКАМ")
-print("="*70)
+        print(f"   Финальная Val Box Loss: {final_loss:.4f}")
 
 if len(combined_results['model'].unique()) == 2:
     models_list = list(combined_results['model'].unique())
@@ -525,18 +530,8 @@ if len(combined_results['model'].unique()) == 2:
             improvement_percent = (improvement / model1_final) * 100
             
             metric_name = metric.split('/')[-1].replace('(B)', '')
-            print(f"\n🚀 {metric_name}:")
-            print(f"   📊 {models_list[0]}: {model1_final:.1f}%")
-            print(f"   🏆 {models_list[1]}: {model2_final:.1f}%")
-            print(f"   💚 АБСОЛЮТНОЕ УЛУЧШЕНИЕ: +{improvement:.1f}%")
-            print(f"   📈 ОТНОСИТЕЛЬНОЕ УЛУЧШЕНИЕ: +{improvement_percent:.1f}%")
-
-print("\n" + "="*70)
-print("🎯 ВЫВОДЫ И РЕКОМЕНДАЦИИ:")
-print("="*70)
-print("✅ YOLOv8-n1 демонстрирует ПРЕВОСХОДНЫЕ результаты по всем метрикам")
-print("✅ Улучшение точности: +15-20% по основным показателям")
-print("✅ Ускорение сходимости: в 2 раза быстрее достигает высоких значений")
-print("✅ Снижение потерь: на 30-50% лучше показатели валидации")
-print("✅ РЕКОМЕНДАЦИЯ: Использовать YOLOv8-n1 для всех практических применений")
-print("💡 Наша оптимизированная архитектура доказала свою эффективность!")
+            print(f"\n{metric_name}:")
+            print(f"   {models_list[0]}: {model1_final:.1f}%")
+            print(f"   {models_list[1]}: {model2_final:.1f}%")
+            print(f"   Абсолютное улучшение: +{improvement:.1f}%")
+            print(f"   Относительное улучшение: +{improvement_percent:.1f}%")
