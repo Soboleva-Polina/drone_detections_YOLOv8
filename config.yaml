@@ -1,0 +1,13 @@
+# dataset.yaml - Конфигурационный файл датасета для YOLOv8
+path: C:\Users\User\Desktop\drone_yoloV9
+train: images/train
+val: images/val
+test: images/test 
+
+# Number of classes
+nc: 2
+
+# Class names
+names:
+  0: drone
+  1: person
