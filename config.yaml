@@ -1,4 +1,4 @@
-# dataset.yaml - Конфигурационный файл датасета для YOLOv8
+# Конфигурационный файл датасета для YOLOv8
 path: C:\Users\User\Desktop\drone_yoloV9
 train: images/train
 val: images/val
