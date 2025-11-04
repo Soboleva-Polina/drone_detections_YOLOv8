@@ -1,0 +1,26 @@
+# Папки с результатами тренировок
+runs/detect/
+runs/segment/
+runs/classify/
+
+# Данные и кэш
+*.pt
+*.pth
+*.onnx
+*.engine
+*.cache
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Данные и логи
+*.log
+*.csv
+*.json
